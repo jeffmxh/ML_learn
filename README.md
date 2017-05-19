@@ -1,6 +1,11 @@
-# 利用RNN进行情感分析(emotion_classify)
-
 [项目主页](https://jeffmxh.github.io/ML_learn/)
+
+* 目录
+  * [Emotion_Classify](#emotion_classify)
+
+Emotion_Classify
+-----------------------------
+# 利用RNN进行情感分析
 
 ## 简介：
 
