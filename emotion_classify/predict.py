@@ -85,10 +85,10 @@ def result_translate(prob_list):
     result_emotion_code = sign_dict[max(prob_list)]
     return result_emotion_code
 
-def main(file_path, column, outfile):
-    '''
-    定义logging格式
-    '''
+'''
+定义logging格式
+'''
+def get_logger():
     logger = logging.getLogger('mylogger')  
     logger.setLevel(logging.INFO) 
     console = logging.StreamHandler()  
@@ -96,7 +96,10 @@ def main(file_path, column, outfile):
     formatter = logging.Formatter('[%(levelname)-3s]%(asctime)s %(filename)s[line:%(lineno)d]:%(message)s')
     console.setFormatter(formatter)  
     logger.addHandler(console)  
+    return logger
 
+def main(file_path, column, outfile):
+    logger = get_logger()
     comment = load_predict_data(data_path = file_path, target_column = column, params = params, logger = logger)
     logger.info('Data ready, try loading pretrained model...')
     model = load_model(params)
