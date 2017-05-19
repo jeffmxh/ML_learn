@@ -35,17 +35,19 @@ from collections import namedtuple
 '''
 参数设置
 '''
-params = {
-    'num_classes' : 8,
-    'maxlen' : 50,
-    'batch_size' : 16,
-    'epochs' : 10,
-    'layer':'lstm',
-    'train_data_path' : 'train_data/train_data.xlsx',
-    'word2vec_path' : 'word2vec/word2vec_wx',
-    'model_name':'lstm_seven_senti',
-    'embedding_train' : False
-}
+class Params():
+    def __init__(self, rnn_type):
+        if rnn_type not in ['lstm', 'bilstm', 'gru']:
+            raise KeyError
+        self.num_classes = 8
+        self.maxlen = 50
+        self.batch_size = 16
+        self.epochs = 10
+        self.layer = rnn_type
+        self.train_data_path = 'train_data/train_data.xlsx'
+        self.word2vec_path = 'word2vec/word2vec_wx'
+        self.model_name = 'lstm_seven_senti'
+        self.embedding_train = False
 
 Train_Set = namedtuple('Train_Set', 'x y xt yt xa ya')
 
@@ -68,7 +70,7 @@ def load_word2vec(model_path):
 训练数据预处理过程
 '''
 def preprocess_data(wordvec_model, params, logger):
-    raw_data = pd.read_excel(params['train_data_path'])
+    raw_data = pd.read_excel(params.train_data_path)
     logger.info('Data loaded!')
     data = pd.DataFrame({'sent' : raw_data.sentence,
                          'mark' : raw_data.emotion_1 })
@@ -83,9 +85,9 @@ def preprocess_data(wordvec_model, params, logger):
     reverse_seq = lambda id_seq: id_seq[::-1]
     concat_seq = lambda a,b: list(np.hstack((a, b)))
     logger.info("Pad sequences (samples x time)...")
-    data['sent_rev'] = list(sequence.pad_sequences(data['sent'], maxlen=params['maxlen']))
+    data['sent_rev'] = list(sequence.pad_sequences(data['sent'], maxlen=params.maxlen))
     data['sent_rev'] = data['sent_rev'].apply(reverse_seq)
-    data['sent'] = list(sequence.pad_sequences(data['sent'], maxlen=params['maxlen'], padding='post', truncating='post'))
+    data['sent'] = list(sequence.pad_sequences(data['sent'], maxlen=params.maxlen, padding='post', truncating='post'))
     data['sent'] = data['sent'].combine(data['sent_rev'], func=concat_seq)
     return data
 
@@ -95,10 +97,10 @@ def preprocess_data(wordvec_model, params, logger):
 def split_data(train_data, params):
     x = np.array(list(train_data['sent']))[::2] #训练集
     y = np.array(list(train_data['mark']))[::2]
-    y = keras.utils.to_categorical(y, params['num_classes'])
+    y = keras.utils.to_categorical(y, params.num_classes)
     xt = np.array(list(train_data['sent']))[1::2] #测试集
     yt = np.array(list(train_data['mark']))[1::2]
-    yt = keras.utils.to_categorical(yt, params['num_classes'])
+    yt = keras.utils.to_categorical(yt, params.num_classes)
     xa = np.array(list(train_data['sent'])) #全集
     ya = np.array(list(train_data['mark']))
     return Train_Set(x, y, xt, yt, xa, ya)
@@ -111,24 +113,25 @@ def build_model(wordvec_weight, params, logger):
         input_dim=wordvec_weight.shape[0],
         output_dim=wordvec_weight.shape[1],
         weights=[wordvec_weight],
-        trainable=params['embedding_train'])
+        trainable=params.embedding_train)
     logger.info('Build model...')
     model = Sequential()
     model.add(word_embedding_layer)
     model.add(Dropout(0.1))
-    if params['layer']=='lstm':
+    if params.layer=='lstm':
         model.add(LSTM(128, return_sequences = False))
-    if params['layer']=='bilstm':
+    if params.layer=='bilstm':
         model.add(Bidirectional(LSTM(128, return_sequences = False))) 
-    if params['layer']=='gru':
+    if params.layer=='gru':
         model.add(GRU(128, return_sequences = False))
     model.add(Dropout(0.5))
-    model.add(Dense(params['num_classes']))
+    model.add(Dense(params.num_classes))
     model.add(Activation('softmax'))
     model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=[metrics.mae, metrics.categorical_accuracy])
     return model
     
 def main():
+    params = Params('lstm')
 	if not os.path.isdir('log'):
         os.mkdir('log')
     '''
@@ -137,7 +140,7 @@ def main():
     logger = logging.getLogger("my_logger")
     logger.setLevel(logging.DEBUG)
     # 建立一个filehandler来把日志记录在文件里，级别为debug以上
-    fh = logging.FileHandler('log/' + params['model_name'] + "_train.log")
+    fh = logging.FileHandler('log/' + params.model_name + "_train.log")
     fh.setLevel(logging.DEBUG)
     # 建立一个streamhandler来把日志打在CMD窗口上，级别为info以上
     ch = logging.StreamHandler()
@@ -154,13 +157,13 @@ def main():
     开始训练
     '''
     logger.info('try loading pretrained word2vec model...')
-    wordvec_model, wordvec_weight = load_word2vec(params['word2vec_path'])
+    wordvec_model, wordvec_weight = load_word2vec(params.word2vec_path)
     data_all = preprocess_data(wordvec_model, params, logger)
     train_data = split_data(data_all, params)
     model = build_model(wordvec_weight, params, logger)
-    model.fit(train_data.x, train_data.y, batch_size=params['batch_size'], epochs=params['epochs'], validation_data=(train_data.xt, train_data.yt))
-    model_path = 'models/' + params['model_name'] + '_' + time.strftime('%m%d',time.localtime(time.time())) + '.json'
-    weight_path = 'models/' + params['model_name'] + '_' + time.strftime('%m%d',time.localtime(time.time())) + '_weight.h5'
+    model.fit(train_data.x, train_data.y, batch_size=params.batch_size, epochs=params.epochs, validation_data=(train_data.xt, train_data.yt))
+    model_path = 'models/' + params.model_name + '_' + time.strftime('%m%d',time.localtime(time.time())) + '.json'
+    weight_path = 'models/' + params.model_name + '_' + time.strftime('%m%d',time.localtime(time.time())) + '_weight.h5'
     logger.info('模型存储路径: ' + model_path)
     logger.info('模型权重存储路径: ' + weight_path)
     json_string = model.to_json()
