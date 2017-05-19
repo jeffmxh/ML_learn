@@ -162,14 +162,13 @@ def build_model(wordvec_weight, params, logger):
     model.add(Activation('softmax'))
     model.compile(loss='categorical_crossentropy', optimizer='adam', metrics=[metrics.mae, metrics.categorical_accuracy])
     return model
-    
-def main():
-    params = Params('lstm')
-	if not os.path.isdir('log'):
+
+'''
+设定日志文件格式
+'''
+def get_logger(params):
+    if not os.path.isdir('log'):
         os.mkdir('log')
-    '''
-    设定日志文件格式
-    '''
     logger = logging.getLogger("my_logger")
     logger.setLevel(logging.DEBUG)
     # 建立一个filehandler来把日志记录在文件里，级别为debug以上
@@ -185,10 +184,11 @@ def main():
     #将相应的handler添加在logger对象中
     logger.addHandler(ch)
     logger.addHandler(fh)
-
-    '''
-    开始训练
-    '''
+    return logger
+    
+def main():
+    params = Params('lstm')
+	logger = get_logger(params)
     logger.info('try loading pretrained word2vec model...')
     wordvec_model, wordvec_weight = load_word2vec(params.word2vec_path)
     data_all, params = preprocess_data(wordvec_model, params, logger)
