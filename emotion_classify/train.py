@@ -29,7 +29,7 @@ from keras.layers.recurrent import LSTM, GRU
 from keras.layers.wrappers import Bidirectional
 from keras import backend as K
 from keras import metrics
-from multiprocessing import Pool
+from pickle import dump
 from collections import namedtuple
 
 '''
@@ -46,8 +46,12 @@ class Params():
         self.layer = rnn_type
         self.train_data_path = 'train_data/train_data.xlsx'
         self.word2vec_path = 'word2vec/word2vec_wx'
-        self.model_name = 'lstm_seven_senti'
+        self.model_name = 'lstm_seven_senti_prewordvec'
         self.embedding_train = False
+        self.thread = 16
+        self.dict_len = 0
+    def get_dict_len(self, dict_len):
+        self.dict_len = dict_len
 
 Train_Set = namedtuple('Train_Set', 'x y xt yt xa ya')
 
@@ -62,34 +66,60 @@ def trans_emo(emo):
 通过gensim加载预训练的word2vec模型
 '''
 def load_word2vec(model_path):
-    wordvec_model = gensim.models.word2vec.Word2Vec.load(model_path)
-    wordvec_weight = wordvec_model.wv.syn0
+    try:
+        wordvec_model = gensim.models.word2vec.Word2Vec.load(model_path)
+        wordvec_weight = wordvec_model.wv.syn0
+    except:
+        wordvec_model = ''
+        wordvec_weight = ''
+        print('Pretrained word2vec model not found, use fresh params...')
     return wordvec_model, wordvec_weight
 
 '''
 训练数据预处理过程
 '''
 def preprocess_data(wordvec_model, params, logger):
-    raw_data = pd.read_excel(params.train_data_path)
-    logger.info('Data loaded!')
-    data = pd.DataFrame({'sent' : raw_data.sentence,
-                         'mark' : raw_data.emotion_1 })
-    data['mark'] = data['mark'].apply(trans_emo)
-    logger.info('emotion_tag transformed!')
-    cw = lambda x: list(jieba.cut(str(x))) #定义分词函数
-    data['words'] = data['sent'].apply(cw)
-    vocab = dict([(k, v.index) for k, v in wordvec_model.wv.vocab.items()])
-    word_to_id = lambda word: not (vocab.get(word) is None) and vocab.get(word) or 0
-    words_to_ids = lambda words: list(map(word_to_id, words))
-    data['sent'] = data['words'].apply(words_to_ids)
-    reverse_seq = lambda id_seq: id_seq[::-1]
-    concat_seq = lambda a,b: list(np.hstack((a, b)))
-    logger.info("Pad sequences (samples x time)...")
-    data['sent_rev'] = list(sequence.pad_sequences(data['sent'], maxlen=params.maxlen))
-    data['sent_rev'] = data['sent_rev'].apply(reverse_seq)
-    data['sent'] = list(sequence.pad_sequences(data['sent'], maxlen=params.maxlen, padding='post', truncating='post'))
-    data['sent'] = data['sent'].combine(data['sent_rev'], func=concat_seq)
-    return data
+    if wordvec_model:
+        raw_data = pd.read_excel(params.train_data_path)
+        logger.info('Data loaded!')
+        data = pd.DataFrame({'sent' : raw_data.sentence,
+                             'mark' : raw_data.emotion_1 })
+        data['mark'] = data['mark'].apply(trans_emo)
+        logger.info('emotion_tag transformed!')
+        cw = lambda x: list(jieba.cut(str(x))) #定义分词函数
+        data['words'] = data['sent'].apply(cw)
+        vocab = dict([(k, v.index) for k, v in wordvec_model.wv.vocab.items()])
+        word_to_id = lambda word: not (vocab.get(word) is None) and vocab.get(word) or 0
+        words_to_ids = lambda words: list(map(word_to_id, words))
+        data['sent'] = data['words'].apply(words_to_ids)
+        reverse_seq = lambda id_seq: id_seq[::-1]
+        concat_seq = lambda a,b: list(np.hstack((a, b)))
+        logger.info("Pad sequences (samples x time)...")
+        data['sent_rev'] = list(sequence.pad_sequences(data['sent'], maxlen=params.maxlen))
+        data['sent_rev'] = data['sent_rev'].apply(reverse_seq)
+        data['sent'] = list(sequence.pad_sequences(data['sent'], maxlen=params.maxlen, padding='post', truncating='post'))
+        data['sent'] = data['sent'].combine(data['sent_rev'], func=concat_seq)
+    else:
+        raw_data = pd.read_excel(params.train_data_path)
+        logger.info('Data loaded!')
+        data = pd.DataFrame({'sent' : raw_data.sentence,
+                             'mark' : raw_data.emotion_1 })
+        data['mark'] = data['mark'].apply(trans_emo)
+        logger.info('emotion_tag transformed!')
+        cw = lambda x: list(jieba.cut(str(x))) #定义分词函数
+        data['words'] = data['sent'].apply(cw)
+        w = [] #将所有词语整合在一起
+        for i in data['words']:
+            w.extend(i)
+        dict_w = pd.DataFrame(pd.Series(w).value_counts()) #统计词的出现次数
+        dict_w['id']=list(range(1,len(dict_w)+1))
+        dump(dict_w, open('dict_w.pickle', 'wb'))
+        params.get_dict_len(len(dict_w)+1)
+        get_sent = lambda x: list(dict_w['id'][x])
+        data['sent'] = data['words'].apply(get_sent)
+        logger.info("Pad sequences (samples x time)...")
+        data['sent'] = list(sequence.pad_sequences(data['sent'], maxlen=params.maxlen, padding='post', truncating='post'))
+    return data, params
 
 '''
 切分训练集和测试集
@@ -109,11 +139,14 @@ def split_data(train_data, params):
 构建keras模型
 '''
 def build_model(wordvec_weight, params, logger):
-    word_embedding_layer = Embedding(
-        input_dim=wordvec_weight.shape[0],
-        output_dim=wordvec_weight.shape[1],
-        weights=[wordvec_weight],
-        trainable=params.embedding_train)
+    if wordvec_weight!='':
+        word_embedding_layer = Embedding(
+            input_dim=wordvec_weight.shape[0],
+            output_dim=wordvec_weight.shape[1],
+            weights=[wordvec_weight],
+            trainable=params.embedding_train)
+    else:
+        word_embedding_layer = Embedding(params.dict_len+1, 256)
     logger.info('Build model...')
     model = Sequential()
     model.add(word_embedding_layer)
@@ -158,7 +191,7 @@ def main():
     '''
     logger.info('try loading pretrained word2vec model...')
     wordvec_model, wordvec_weight = load_word2vec(params.word2vec_path)
-    data_all = preprocess_data(wordvec_model, params, logger)
+    data_all, params = preprocess_data(wordvec_model, params, logger)
     train_data = split_data(data_all, params)
     model = build_model(wordvec_weight, params, logger)
     model.fit(train_data.x, train_data.y, batch_size=params.batch_size, epochs=params.epochs, validation_data=(train_data.xt, train_data.yt))
