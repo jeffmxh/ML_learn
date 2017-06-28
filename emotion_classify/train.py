@@ -23,7 +23,8 @@ sys.setdefaultencoding('utf-8')
 from keras.preprocessing import sequence
 from keras.optimizers import SGD, RMSprop, Adagrad
 from keras.models import Sequential
-from keras.layers.core import Dense, Dropout, Activation
+from keras.layers import Conv1D, GlobalMaxPooling1D, MaxPooling1D
+from keras.layers.core import Dense, Dropout, Activation, Flatten
 from keras.layers.embeddings import Embedding
 from keras.layers.recurrent import LSTM, GRU
 from keras.layers.wrappers import Bidirectional
@@ -36,17 +37,17 @@ from collections import namedtuple
 参数设置
 '''
 class Params():
-    def __init__(self, rnn_type):
-        if rnn_type not in ['lstm', 'bilstm', 'gru']:
+    def __init__(self, layer_type):
+        if layer_type not in ['lstm', 'bilstm', 'gru', 'mutate', 'cnn', 'ConvRnn']:
             raise KeyError
         self.num_classes = 8
         self.maxlen = 50
         self.batch_size = 16
         self.epochs = 10
-        self.layer = rnn_type
+        self.layer = layer_type
         self.train_data_path = 'train_data/train_data.xlsx'
         self.word2vec_path = 'word2vec/word2vec_wx'
-        self.model_name = 'lstm_seven_senti_prewordvec'
+        self.model_name = 'multi_senti_ConvRnn'
         self.embedding_train = False
         self.thread = 16
         self.dict_len = 0
@@ -153,10 +154,37 @@ def build_model(wordvec_weight, params, logger):
     model.add(Dropout(0.1))
     if params.layer=='lstm':
         model.add(LSTM(128, return_sequences = False))
-    if params.layer=='bilstm':
+    elif params.layer=='bilstm':
         model.add(Bidirectional(LSTM(128, return_sequences = False))) 
-    if params.layer=='gru':
+    elif params.layer=='gru':
         model.add(GRU(128, return_sequences = False))
+    elif params.layer=='cnn':
+        model.add(Conv1D(256,
+                         3,
+                         padding='valid',
+                         activation='relu',
+                         strides=1))
+        model.add(GlobalMaxPooling1D())
+        # model.add(MaxPooling1D(pool_size = 2))
+        # model.add(Flatten())
+        model.add(Dropout(0.5))
+        model.add(Dense(128))
+        model.add(Dropout(0.5))
+        model.add(Activation('relu'))
+    elif params.layer=='ConvRnn':
+        model.add(Conv1D(250,
+                         3,
+                         padding='valid',
+                         activation='relu',
+                         strides=1))
+        # we use max pooling:
+        model.add(MaxPooling1D(pool_size = 2))
+        model.add(Dropout(0.3))
+        model.add(LSTM(128))
+    else: # 采取自定义的模型结构
+        model.add(GRU(128, return_sequences = True))
+        model.add(Dropout(0.2))
+        model.add(GRU(64, return_sequences = False))
     model.add(Dropout(0.5))
     model.add(Dense(params.num_classes))
     model.add(Activation('softmax'))
@@ -187,13 +215,14 @@ def get_logger(params):
     return logger
     
 def main():
-    params = Params('lstm')
-	logger = get_logger(params)
+    params = Params('cnn')
+    logger = get_logger(params)
     logger.info('try loading pretrained word2vec model...')
     wordvec_model, wordvec_weight = load_word2vec(params.word2vec_path)
     data_all, params = preprocess_data(wordvec_model, params, logger)
     train_data = split_data(data_all, params)
     model = build_model(wordvec_weight, params, logger)
+    model.summary()
     model.fit(train_data.x, train_data.y, batch_size=params.batch_size, epochs=params.epochs, validation_data=(train_data.xt, train_data.yt))
     model_path = 'models/' + params.model_name + '_' + time.strftime('%m%d',time.localtime(time.time())) + '.json'
     weight_path = 'models/' + params.model_name + '_' + time.strftime('%m%d',time.localtime(time.time())) + '_weight.h5'
@@ -205,4 +234,4 @@ def main():
     model.save_weights(weight_path)
 
 if __name__ == '__main__':
-	main()
+    main()
