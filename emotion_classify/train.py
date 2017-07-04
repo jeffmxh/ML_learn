@@ -47,7 +47,7 @@ class Params():
         self.layer = layer_type
         self.train_data_path = 'train_data/train_data.xlsx'
         self.word2vec_path = 'word2vec/word2vec_wx'
-        self.model_name = 'multi_senti_ConvRnn'
+        self.model_name = 'multi_senti_gru_best'
         self.embedding_train = False
         self.thread = 16
         self.dict_len = 0
@@ -215,7 +215,7 @@ def get_logger(params):
     return logger
     
 def main():
-    params = Params('cnn')
+    params = Params('gru')
     logger = get_logger(params)
     logger.info('try loading pretrained word2vec model...')
     wordvec_model, wordvec_weight = load_word2vec(params.word2vec_path)

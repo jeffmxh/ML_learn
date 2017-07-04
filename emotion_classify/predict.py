@@ -31,8 +31,8 @@ from train import load_word2vec
 
 params = {
     'word2vec_path' : 'word2vec/word2vec_wx',
-    'model_path' : 'models/lstm_seven_senti_prewordvec_0519.json',
-    'weight_path' : 'models/lstm_seven_senti_prewordvec_0519_weight.h5'
+    'model_path' : 'models/multi_senti_cnn_best_0629.json',
+    'weight_path' : 'models/multi_senti_cnn_best_0629_weight.h5'
 }
 
 def load_predict_data(data_path, target_column, params, logger):
