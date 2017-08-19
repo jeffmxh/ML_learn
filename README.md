@@ -90,3 +90,7 @@ python predict.py -i '/home/jeffmxh/example.xlsx' -c 'content' -o 'emotion_outpu
 ## 注意：
 
 以上所有任务均在**python2.7**和**Keras2.0.2**下完成，由于**Keras**升级过程中API变化较大建议升级到此版本
+
+***
+
+**致谢**：特别感谢[ALEX](https://github.com/alexwwang)以及南京巴兰塔信息科技有限公司在我完成此项目过程中对我的帮助以及技术支持！
