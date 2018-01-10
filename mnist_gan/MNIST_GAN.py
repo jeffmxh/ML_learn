@@ -142,7 +142,7 @@ def build_discriminator():
 if __name__ == '__main__':
 
     logger = get_logger()
-    mnist = read_data_sets("/home/da/jupyter_notebook/tensorflow/MNIST_data/", one_hot=True)
+    mnist = read_data_sets("MNIST_data/", one_hot=True)
 
     # 定义超参数
     NB_EPOCHS = 50
